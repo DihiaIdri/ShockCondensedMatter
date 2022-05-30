@@ -36,8 +36,7 @@ class ShockCMatter:
                                 self.M_i.D*(tt**4 - ti**4)/4 - self.M_i.E*(1/tt - 1/ti))*1000/self.M_i.M
         plt.plot(tt,y, 'r')
         plt.show()
-        print(state1p)
-        print(Tfp)
+
 
         # 2.Shock in projectile - back of the projectile (Vsp_1 and Vi)
         state2 = ShockCMatter.shock_exit(self.M_i, state1p[0], state1p[1], state1p[2], V1)
@@ -52,7 +51,6 @@ class ShockCMatter:
         state3S = state3[6:11]  # Steel
 
         ShockCMatter.position_graph(self, V1, state1p, state1T, V2, state2p, V3, state3T, state3S)
-
 
     @staticmethod
     def impedance_matching(L, rhoL, PL, TL, ViL, R, rhoR, PR, TR, ViR):
