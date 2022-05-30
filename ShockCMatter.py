@@ -25,6 +25,9 @@ class ShockCMatter:
         state1p = state1[1:6]  # rhofL (g/cm^3),PfL (GPa), TfL (K), delta_energyL (MJ/kg) , VsL (km/s)
         state1T = state1[6:11]  # rhofR, PfR, TfR, delta_energyR, VsR
 
+        #Grady and Kipp 1997, using current shock speed and longitudinal speed.
+        [PfL_GK, PfL_GK1] = ShockCMatter.impedance_Ph(self.M_i.density, state1p[4],self.M_i.CL, self.T_i.density, state1T[4],self.T_i.CL, self.Vip)
+
         # Obtain Projectile temperature using Cp = Cp(T). For internal energy we need Cv, but NIST only has Cp, but for solids Cv ~ Cp.
         ti = self.M_i.Ti/1000
         t0 = np.array([state1p[2]/1000])  # guess
@@ -37,12 +40,10 @@ class ShockCMatter:
         plt.plot(tt,y, 'r')
         plt.show()
 
-
         # 2.Shock in projectile - back of the projectile (Vsp_1 and Vi)
         state2 = ShockCMatter.shock_exit(self.M_i, state1p[0], state1p[1], state1p[2], V1)
         V2 = float(state2[0])
         state2p = state2[1:4]  # rhofR, PfR, VsR
-
         # 3.Impedance matching Alumina reflected shock - steel target (Idealization) (VsT and 0)
         state3 = ShockCMatter.impedance_matching(self.T_i, state1T[0], state1T[1], state1T[2], V1,
                                                  self.S_i, self.S_i.density, self.S_i.Pi, self.S_i.Ti, self.ViT)
@@ -51,6 +52,17 @@ class ShockCMatter:
         state3S = state3[6:11]  # Steel
 
         ShockCMatter.position_graph(self, V1, state1p, state1T, V2, state2p, V3, state3T, state3S)
+
+    @staticmethod
+    def impedance_Ph(density_p, Us_p, CL_p, density_T, Us_T, CL_T, VI):
+        Z_p = abs(density_p*Us_p)
+        Z_T = abs(density_T*Us_T)
+        Ph = Z_p*Z_T*VI/(Z_p+Z_T)
+
+        Z_pL = abs(density_p*CL_p)
+        Z_TL = abs(density_T*CL_T)
+        PhL = Z_pL*Z_TL*VI/(Z_pL+Z_TL)
+        return Ph, PhL
 
     @staticmethod
     def impedance_matching(L, rhoL, PL, TL, ViL, R, rhoR, PR, TR, ViR):
@@ -129,7 +141,7 @@ class ShockCMatter:
         x5 = x1 + V2*(t4-t1)
 
         # plt.xlim(x1b, x1S),
-        # plt.ylim(0, 3*10**-6)
+        plt.ylim(0, 3*10**-6)
         plt.plot([x1_sp, x1], [t1_sp, t1])
         plt.plot([x1b, x1], [t1b, t1])
         plt.plot([x1_sT, x2], [t1_sT, t2])
