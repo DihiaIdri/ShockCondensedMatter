@@ -2,10 +2,13 @@ import numpy as np
 from scipy.optimize import fsolve
 from sympy import *
 import matplotlib.pyplot as plt
+from ExpansionWaves import ExpansionWaves
+from tabulate import tabulate
 
 
 class ShockCMatter:
     def __init__(self, metalData, targetData, steelData, Vip, ViT, xProj, xTar, xTarb, xSteel):
+        # initialize initial state
         self.M_i = metalData  # M for metal
         self.T_i = targetData  # T for target
         self.S_i = steelData  # S for steel
@@ -17,7 +20,7 @@ class ShockCMatter:
         self.ViT = ViT
 
     def shock_interactions(self):
-        # impedance_matching(L, rhoL, PL, TL,ViL, R, rhoR, PR, TR, ViR) START WITH LEFT and then RIGHT
+        # impedance_matching(L, rhoL, PL, TL,ViL, R, rhoR, PR, TR, ViR) start with LEFT and then RIGHT
         # 1.Impedance matching projectile-target impact
         state1 = ShockCMatter.impedance_matching(self.M_i, self.M_i.density, self.M_i.Pi, self.M_i.Ti, self.Vip,
                                                  self.T_i, self.T_i.density, self.T_i.Pi, self.T_i.Ti, self.ViT)
@@ -25,50 +28,42 @@ class ShockCMatter:
         state1p = state1[1:6]  # rhofL (g/cm^3),PfL (GPa), TfL (K), delta_energyL (MJ/kg) , VsL (km/s)
         state1T = state1[6:11]  # rhofR, PfR, TfR, delta_energyR, VsR
 
-        #Grady and Kipp 1997, using current shock speed and longitudinal speed.
-        [PfL_GK, PfL_GK1] = ShockCMatter.impedance_Ph(self.M_i.density, state1p[4],self.M_i.CL, self.T_i.density, state1T[4],self.T_i.CL, self.Vip)
-
-        # Obtain Projectile temperature using Cp = Cp(T). For internal energy we need Cv, but NIST only has Cp, but for solids Cv ~ Cp.
-        ti = self.M_i.Ti/1000
+        # Projectile Temperature with Cp = Cp(T). Internal energy requires Cv, NIST only has Cp: For solids Cv ~ Cp.
+        ti = self.M_i.Ti/1000  # NIST equation requires temperature/1000
         t0 = np.array([state1p[2]/1000])  # guess
         t = fsolve(ShockCMatter.changingCp_temp, t0, args=(ti, self.M_i.A, self.M_i.B, self.M_i.C, self.M_i.D, self.M_i.E,
                                                            self.M_i.F, self.M_i.H, state1p[3]*10**6, self.M_i.M), xtol=1e-6)[0]
-        Tfp = t * 1000  # K
-        tt = np.linspace(0.01, 5, 100)
+        Tfp = t*1000  # K Final temperature
+        # Plot the deltaE - Nist equation to validate the temperature.
+        tt = np.linspace(0.29815, 2, 50)
         y = state1p[3]*10**6 - (self.M_i.A*(tt-ti) + self.M_i.B*(tt**2 - ti**2)/2 + self.M_i.C*(tt**3 - ti**3)/3 +
                                 self.M_i.D*(tt**4 - ti**4)/4 - self.M_i.E*(1/tt - 1/ti))*1000/self.M_i.M
-        plt.plot(tt,y, 'r')
+        plt.plot(tt, y, 'r')
         plt.show()
 
+        # Expansion waves
+        # ExpansionWaves(state1p, V1, 0, self.M_i.Pi)
+
         # 2.Shock in projectile - back of the projectile (Vsp_1 and Vi)
-        state2 = ShockCMatter.shock_exit(self.M_i, state1p[0], state1p[1], state1p[2], V1)
-        V2 = float(state2[0])
-        state2p = state2[1:4]  # rhofR, PfR, VsR
+        #state2 = ShockCMatter.shock_exit(self.M_i, state1p[0], state1p[1], state1p[2], V1)
+        #V2 = float(state2[0])
+        #state2p = state2[1:4]  # rhofR, PfR, VsR
+
         # 3.Impedance matching Alumina reflected shock - steel target (Idealization) (VsT and 0)
-        state3 = ShockCMatter.impedance_matching(self.T_i, state1T[0], state1T[1], state1T[2], V1,
-                                                 self.S_i, self.S_i.density, self.S_i.Pi, self.S_i.Ti, self.ViT)
-        V3 = float(state3[0])
-        state3T = state3[1:6]  # Alumina
-        state3S = state3[6:11]  # Steel
+        #state3 = ShockCMatter.impedance_matching(self.T_i, state1T[0], state1T[1], state1T[2], V1,
+        #                                         self.S_i, self.S_i.density, self.S_i.Pi, self.S_i.Ti, self.ViT)
+        #V3 = float(state3[0])
+        #state3T = state3[1:6]  # Alumina
+        #state3S = state3[6:11]  # Steel
 
-        ShockCMatter.position_graph(self, V1, state1p, state1T, V2, state2p, V3, state3T, state3S)
-
-    @staticmethod
-    def impedance_Ph(density_p, Us_p, CL_p, density_T, Us_T, CL_T, VI):
-        Z_p = abs(density_p*Us_p)
-        Z_T = abs(density_T*Us_T)
-        Ph = Z_p*Z_T*VI/(Z_p+Z_T)
-
-        Z_pL = abs(density_p*CL_p)
-        Z_TL = abs(density_T*CL_T)
-        PhL = Z_pL*Z_TL*VI/(Z_pL+Z_TL)
-        return Ph, PhL
+        #ShockCMatter.position_graph(self, V1, state1p, state1T, V2, state2p, V3, state3T, state3S)
 
     @staticmethod
     def impedance_matching(L, rhoL, PL, TL, ViL, R, rhoR, PR, TR, ViR):
         newState = np.ones(11)  # downstreamProperties
         V0 = np.array([0])  # guess
         V2 = fsolve(ShockCMatter.pressure_matching, V0, args=(L, rhoL, PL, ViL, R, rhoR, PR, ViR), xtol=1e-6)
+        print(V2)
         newState[0] = V2[0]
         newState[1:11] = ShockCMatter.downstream_prop(L, rhoL, PL, TL, ViL, R, rhoR, PR, TR, ViR, V2[0])
         return newState
@@ -81,22 +76,15 @@ class ShockCMatter:
         return PfL - PfR
 
     @staticmethod
-    def changingCp_temp(t, ti, A, B, C, D, E, F, H, delta_E, M):
-        LHS = delta_E
-        RHS = (A*(t-ti) + B*(t**2 - ti**2)/2 + C*(t**3 - ti**3)/3 + D*(t**4 - ti**4)/4 - E*(1/t - 1/ti))*1000/M
-        # RHS = (A*t + B*t**2/2 + C*t**3/3 + D*t**4/4 - E/t + F - H)*1000/M  # Nist equation, F and H replace ti
-        return LHS - RHS
-
-    @staticmethod
     def downstream_prop(L, rhoL, PL, TL, ViL, R, rhoR, PR, TR, ViR, V):
         PfL = rhoL*(ViL - V)*(L.C01 + (ViL - V)*L.s1) + PL   # GPa
         VsL = ViL - (L.C01 + L.s1*(ViL - V))  # km/s
         rhofL = rhoL*(VsL - ViL)/(VsL - V)  # g/cm^3
         delta_energyL = (1/rhoL - 1/rhofL)*(PfL + PL)/2  # MJ/kg
-        TfL = (delta_energyL*10**6/L.specHC) + TL  # K
+        TfL = (delta_energyL*10**6/L.specHC) + TL  #K
 
         PfR = rhoR*(V - ViR)*(R.C01 + (V - ViR)*R.s1) + PR
-        VsR = ViR + R.C01 + R.s1*(V - ViR)
+        VsR = ViR + (R.C01 + R.s1*(V - ViR))
         rhofR = rhoR*(VsR - ViR)/(VsR - V)
         delta_energyR = (1/rhoR - 1/rhofR)*(PfR + PR)/2
         TfR = (delta_energyR*10**6/R.specHC) + TR
@@ -104,18 +92,13 @@ class ShockCMatter:
             return np.array([rhofL, PfL, TfL, delta_energyL, VsL, rhofR, PfR, TfR, delta_energyR, VsR])
         else:
             print("There is a problem")
-
     @staticmethod
-    def shock_exit(R, rho1, P1, T1, V1):
-        P2 = R.Pi
-        V = symbols('V')
-        b = solve((P2 - P1) - rho1*(V - V1)*(R.C01 + R.s1*(V - V1)), V)
-        V2 = b[1]
-        PfR = float(rho1*(V2 - V1)*(R.C01 + (V2 - V1)*R.s1) + P1)  # GPa
-        VsR = float(V1 + R.C01 + R.s1*(V2 - V1))
-        rhofR = float(rho1*(VsR - V1)/(VsR - V2))   # g/cm^3
-        newState = [V2, rhofR, PfR, VsR]
-        return newState
+    def changingCp_temp(t, ti, A, B, C, D, E, F, H, delta_E, M):
+        LHS = delta_E  #J/kg
+        # Multiply by 1000 because of NIST equations, H = KJ/mol, M = kg/mol
+        RHS = (A*(t-ti) + B*(t**2 - ti**2)/2 + C*(t**3 - ti**3)/3 + D*(t**4 - ti**4)/4 - E*(1/t - 1/ti))*1000/M
+        # RHS = (A*t + B*t**2/2 + C*t**3/3 + D*t**4/4 - E/t + F - H)*1000/M  # Nist equation, F and H replace ti
+        return LHS - RHS
 
     @staticmethod
     def xt_diagram(x1, t1, V1, x2, t2, V2):
