@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.optimize import fsolve
 from sympy import *
+import math
 import matplotlib.pyplot as plt
-from ExpansionWaves import ExpansionWaves
 from tabulate import tabulate
 
 
@@ -41,31 +41,61 @@ class ShockCMatter:
         plt.plot(tt, y, 'r')
         plt.show()
 
-        # Expansion waves
-        # ExpansionWaves(state1p, V1, 0, self.M_i.Pi)
-
-        # 2.Shock in projectile - back of the projectile (Vsp_1 and Vi)
-        #state2 = ShockCMatter.shock_exit(self.M_i, state1p[0], state1p[1], state1p[2], V1)
-        #V2 = float(state2[0])
-        #state2p = state2[1:4]  # rhofR, PfR, VsR
+        # 2.Expansion wave back of the projectile
+        V2, Vs_lead = ShockCMatter.expansion_projectile(self.M_i, state1p, V1, 'RRW')
+        Vs_trail = self.M_i.CL
+        print(V2, Vs_lead)
+        delta_E_Raleigh, delta_E_Hugoniot, delta_E = ShockCMatter.delta_energy(self.M_i, self.Vip, state1p)
+        t_shock_expansion = fsolve(ShockCMatter.changingCp_temp, t0, args=(ti, self.M_i.A, self.M_i.B, self.M_i.C, self.M_i.D, self.M_i.E,
+                                                           self.M_i.F, self.M_i.H, delta_E*10**6, self.M_i.M), xtol=1e-6)[0]
+        T_shock_expansion = t_shock_expansion*1000  # K Final temperature
+        print(delta_E_Raleigh, delta_E_Hugoniot, delta_E)
+        print(Tf)
 
         # 3.Impedance matching Alumina reflected shock - steel target (Idealization) (VsT and 0)
-        #state3 = ShockCMatter.impedance_matching(self.T_i, state1T[0], state1T[1], state1T[2], V1,
+        # state3 = ShockCMatter.impedance_matching(self.T_i, state1T[0], state1T[1], state1T[2], V1,
         #                                         self.S_i, self.S_i.density, self.S_i.Pi, self.S_i.Ti, self.ViT)
-        #V3 = float(state3[0])
-        #state3T = state3[1:6]  # Alumina
-        #state3S = state3[6:11]  # Steel
+        # V3 = float(state3[0])
+        # state3T = state3[1:6]  # Alumina
+        # state3S = state3[6:11]  # Steel
 
-        #ShockCMatter.position_graph(self, V1, state1p, state1T, V2, state2p, V3, state3T, state3S)
+        # ShockCMatter.position_graph(self, V1, state1p, state1T, V2, state2p, V3, state3T, state3S)
+
+        # Plot the P-u diagram
+        V = np.linspace(-0.5, 1, 20)
+        PLp = self.M_i.density*(self.Vip - V)*(self.M_i.C01 + (self.Vip - V)*self.M_i.s1) + self.M_i.Pi  # GPa LRW
+        PRp = self.M_i.density*(V - V2)*(self.M_i.C01 + (V - V2)*self.M_i.s1) + self.M_i.Pi  # GPa RRW
+        PRT = self.T_i.density*(V - self.ViT)*(self.T_i.C01 + (V - self.ViT)*self.T_i.s1) + self.T_i.Pi  # GPa
+        plt.plot(V, PLp, 'r')
+        plt.plot(V, PRp, 'b')
+        plt.plot(V, PRT, 'g')
+        plt.show()
+
+    @staticmethod
+    def expansion_projectile(state_i, state_f, Vf, side):
+        V0 = 0
+        V2 = fsolve(ShockCMatter.expansion_wave, V0, args=(state_i, state_f, Vf, side), xtol=1e-6)
+        # first Wave speed traveling through final shocked state of the projectile.
+        Vs_lagrange_lead = state_i.C01 + 2*state_i.s1*(Vf - V2)
+        Vs_lead = Vs_lagrange_lead + Vf
+        return V2, Vs_lead
+
+    @staticmethod
+    def expansion_wave(V0, state_i, state_f, Vf, side):
+        # Find V0 of the reflection
+        P0 = state_i.Pi
+        if side == 'LRW':  # LRW: P  = rho0*(V0 - V)*(C0 + s*(V0 - V)) + P0
+            return state_i.density*(V0 - Vf)*(state_i.C01 + state_i.s1*(V0 - Vf)) + P0 - state_f[1]
+        elif side == 'RRW':  # RRW: P  = rho0*(V - V0)*(C0 + s*(V - V0)) + P0
+            return state_i.density*(Vf - V0)*(state_i.C01 + state_i.s1*(Vf - V0)) + P0 - state_f[1]
 
     @staticmethod
     def impedance_matching(L, rhoL, PL, TL, ViL, R, rhoR, PR, TR, ViR):
         newState = np.ones(11)  # downstreamProperties
         V0 = np.array([0])  # guess
-        V2 = fsolve(ShockCMatter.pressure_matching, V0, args=(L, rhoL, PL, ViL, R, rhoR, PR, ViR), xtol=1e-6)
-        print(V2)
-        newState[0] = V2[0]
-        newState[1:11] = ShockCMatter.downstream_prop(L, rhoL, PL, TL, ViL, R, rhoR, PR, TR, ViR, V2[0])
+        V_interface = fsolve(ShockCMatter.pressure_matching, V0, args=(L, rhoL, PL, ViL, R, rhoR, PR, ViR), xtol=1e-6)
+        newState[0] = V_interface[0]
+        newState[1:11] = ShockCMatter.downstream_prop(L, rhoL, PL, TL, ViL, R, rhoR, PR, TR, ViR, V_interface[0])
         return newState
 
     @staticmethod
@@ -92,6 +122,7 @@ class ShockCMatter:
             return np.array([rhofL, PfL, TfL, delta_energyL, VsL, rhofR, PfR, TfR, delta_energyR, VsR])
         else:
             print("There is a problem")
+
     @staticmethod
     def changingCp_temp(t, ti, A, B, C, D, E, F, H, delta_E, M):
         LHS = delta_E  #J/kg
@@ -99,6 +130,18 @@ class ShockCMatter:
         RHS = (A*(t-ti) + B*(t**2 - ti**2)/2 + C*(t**3 - ti**3)/3 + D*(t**4 - ti**4)/4 - E*(1/t - 1/ti))*1000/M
         # RHS = (A*t + B*t**2/2 + C*t**3/3 + D*t**4/4 - E/t + F - H)*1000/M  # Nist equation, F and H replace ti
         return LHS - RHS
+
+    @staticmethod
+    def delta_energy(state_i, Vi, state_f):
+        sv0 = 1/state_i.density
+        sv = 1/state_f[0]
+        Vs = state_f[4]   # It is the shock compression speed because Rayleigh line.
+        # Delta_E_Raleigh is the same as the delta energy computed in downstream prop
+        delta_E_Raleigh = -(Vs - Vi)**2*(sv - sv0)/sv0 + (Vs - Vi)**2*(sv**2 - sv0**2)/(2*sv0**2) - state_i.Pi*(sv - sv0)
+        delta_E_Hugoniot = (state_i.C01/state_i.s1)**2*(math.log((sv0 - state_i.s1*(sv0 - sv))/sv0) +
+                                                        state_i.s1*(sv0 - sv)/(sv0 - state_i.s1*(sv0 - sv))) - state_i.Pi*(sv - sv0)
+        delta_E = delta_E_Raleigh - delta_E_Hugoniot
+        return delta_E_Raleigh, delta_E_Hugoniot, delta_E
 
     @staticmethod
     def xt_diagram(x1, t1, V1, x2, t2, V2):
