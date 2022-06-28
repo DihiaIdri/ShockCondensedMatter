@@ -44,13 +44,7 @@ class ShockCMatter:
         # 2.Expansion wave back of the projectile
         V2, Vs_lead = ShockCMatter.expansion_projectile(self.M_i, state1p, V1, 'RRW')
         Vs_trail = self.M_i.CL
-        print(V2, Vs_lead)
-        delta_E_Raleigh, delta_E_Hugoniot, delta_E = ShockCMatter.delta_energy(self.M_i, self.Vip, state1p)
-        t_shock_expansion = fsolve(ShockCMatter.changingCp_temp, t0, args=(ti, self.M_i.A, self.M_i.B, self.M_i.C, self.M_i.D, self.M_i.E,
-                                                           self.M_i.F, self.M_i.H, delta_E*10**6, self.M_i.M), xtol=1e-6)[0]
-        T_shock_expansion = t_shock_expansion*1000  # K Final temperature
-        print(delta_E_Raleigh, delta_E_Hugoniot, delta_E)
-        print(Tf)
+        delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_shock_expansion = ShockCMatter.delta_energy(self, self.M_i, self.Vip, state1p, ti, t0)
 
         # 3.Impedance matching Alumina reflected shock - steel target (Idealization) (VsT and 0)
         # state3 = ShockCMatter.impedance_matching(self.T_i, state1T[0], state1T[1], state1T[2], V1,
@@ -60,6 +54,8 @@ class ShockCMatter:
         # state3S = state3[6:11]  # Steel
 
         # ShockCMatter.position_graph(self, V1, state1p, state1T, V2, state2p, V3, state3T, state3S)
+        print(V2, Vs_lead)
+        print(delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_shock_expansion)
 
         # Plot the P-u diagram
         V = np.linspace(-0.5, 1, 20)
@@ -70,6 +66,7 @@ class ShockCMatter:
         plt.plot(V, PRp, 'b')
         plt.plot(V, PRT, 'g')
         plt.show()
+
 
     @staticmethod
     def expansion_projectile(state_i, state_f, Vf, side):
@@ -132,7 +129,7 @@ class ShockCMatter:
         return LHS - RHS
 
     @staticmethod
-    def delta_energy(state_i, Vi, state_f):
+    def delta_energy(self, state_i, Vi, state_f, ti, t0):
         sv0 = 1/state_i.density
         sv = 1/state_f[0]
         Vs = state_f[4]   # It is the shock compression speed because Rayleigh line.
@@ -140,8 +137,12 @@ class ShockCMatter:
         delta_E_Raleigh = -(Vs - Vi)**2*(sv - sv0)/sv0 + (Vs - Vi)**2*(sv**2 - sv0**2)/(2*sv0**2) - state_i.Pi*(sv - sv0)
         delta_E_Hugoniot = (state_i.C01/state_i.s1)**2*(math.log((sv0 - state_i.s1*(sv0 - sv))/sv0) +
                                                         state_i.s1*(sv0 - sv)/(sv0 - state_i.s1*(sv0 - sv))) - state_i.Pi*(sv - sv0)
-        delta_E = delta_E_Raleigh - delta_E_Hugoniot
-        return delta_E_Raleigh, delta_E_Hugoniot, delta_E
+        delta_E = delta_E_Raleigh - delta_E_Hugoniot  # MJ/kg
+        # Get the temperature
+        t_shock_expansion = fsolve(ShockCMatter.changingCp_temp, t0, args=(ti, self.M_i.A, self.M_i.B, self.M_i.C, self.M_i.D, self.M_i.E,
+                                                           self.M_i.F, self.M_i.H, delta_E*10**6, self.M_i.M), xtol=1e-6)[0]
+        T_shock_expansion = t_shock_expansion*1000  # K Final temperature
+        return delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_shock_expansion
 
     @staticmethod
     def xt_diagram(x1, t1, V1, x2, t2, V2):
