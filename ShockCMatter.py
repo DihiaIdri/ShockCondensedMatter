@@ -47,14 +47,16 @@ class ShockCMatter:
         delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_shock_expansion = ShockCMatter.delta_energy(self, self.M_i, self.Vip, state1p, ti, t0)
 
         # 3.Impedance matching Alumina reflected shock - steel target (Idealization) (VsT and 0)
-        # state3 = ShockCMatter.impedance_matching(self.T_i, state1T[0], state1T[1], state1T[2], V1,
-        #                                         self.S_i, self.S_i.density, self.S_i.Pi, self.S_i.Ti, self.ViT)
-        # V3 = float(state3[0])
-        # state3T = state3[1:6]  # Alumina
-        # state3S = state3[6:11]  # Steel
+        state3 = ShockCMatter.impedance_matching(self.T_i, state1T[0], state1T[1], state1T[2], V1,
+                                                 self.S_i, self.S_i.density, self.S_i.Pi, self.S_i.Ti, self.ViT)
+        V3 = float(state3[0])
+        state3T = state3[1:6]  # Alumina
+        state3S = state3[6:11]  # Steel
 
-        # ShockCMatter.position_graph(self, V1, state1p, state1T, V2, state2p, V3, state3T, state3S)
+        ShockCMatter.position_graph(self, V1, state1p, state1T, V2, Vs_lead, V3, state3T, state3S)
         print(V2, Vs_lead)
+        print(state1p)
+        print(Tfp)
         print(delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_shock_expansion)
 
         # Plot the P-u diagram
@@ -66,7 +68,6 @@ class ShockCMatter:
         plt.plot(V, PRp, 'b')
         plt.plot(V, PRT, 'g')
         plt.show()
-
 
     @staticmethod
     def expansion_projectile(state_i, state_f, Vf, side):
@@ -150,7 +151,7 @@ class ShockCMatter:
         xf = x1 + V1*(tf-t1)
         return xf, tf
 
-    def position_graph(self, V1, state1p, state1T, V2, state2p, V3, state3T, state3S):
+    def position_graph(self, V1, state1p, state1T, V2, V_lead, V3, state3T, state3S):
         # Graphs and positions
         # 1. back of the projectile (b), projectile shock (s)
         x1b, t1b, V1b, x1_sp, t1_sp, V1_sp = self.xp, 0, self.Vip, self.xT, 0, state1p[4]
@@ -162,7 +163,7 @@ class ShockCMatter:
         x3_I1, t3_I1, V3_I1, x3_sT, t3_sT, V3_sT = self.xT, 0, V1, x2, t2, state3T[4]
         [x3, t3] = ShockCMatter.xt_diagram(x3_I1, t3_I1, V3_I1, x3_sT, t3_sT, V3_sT)
         # 4. Reflected expansion wave projectile (E) and interface (I1)
-        x4_E, t4_E, V4_E, x4_I1, t4_I1, V4_I1 = x1, t1, state2p[2], 0, 0, V1
+        x4_E, t4_E, V4_E, x4_I1, t4_I1, V4_I1 = x1, t1, V_lead, 0, 0, V1
         [x4, t4] = ShockCMatter.xt_diagram(x4_E, t4_E, V4_E, x4_I1, t4_I1, V4_I1)
         # 5. back of the projectile
         x5 = x1 + V2*(t4-t1)

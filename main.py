@@ -1,6 +1,5 @@
 import pandas as pa
 from ShockCMatter import ShockCMatter
-from Expansion import Expansion
 
 
 def main():
@@ -24,14 +23,14 @@ def main():
     xTarb = data_xv.xTS
     xSteel = data_xv.xS
 
-    Al_Al2O3 = ShockCMatter(Al, Al2O3, SS, Vip, ViT, xProj, xTar, xTarb, xSteel)
-    Al_state1 = Al_Al2O3.shock_interactions()
+    # Al_Al2O3 = ShockCMatter(Al, Al2O3, SS, Vip, ViT, xProj, xTar, xTarb, xSteel)
+    # Al_state1 = Al_Al2O3.shock_interactions()
     # Mg_Al2O3 = ShockCMatter(Mg, Al2O3, SS, Vip, ViT, xProj, xTar, xTarb, xSteel)
     # Mg_state1 = Mg_Al2O3.shock_interactions()
     # Ti_Al2O3 = ShockCMatter(Ti, Al2O3, SS, Vip, ViT, xProj, xTar, xTarb, xSteel)
     # Ti_state1 =  Ti_Al2O3.shock_interactions()
-    # Zr_Al2O3 = ShockCMatter(Zr, Al2O3, SS, Vip, ViT, xProj, xTar, xTarb, xSteel)
-    # Zr_Al2O3.shock_interactions()
+    Zr_Al2O3 = ShockCMatter(Zr, Al2O3, SS, Vip, ViT, xProj, xTar, xTarb, xSteel)
+    Zr_Al2O3.shock_interactions()
 
     # Al_Al = ShockCMatter(Al, Al, SS, Vip, ViT, xProj, xTar, xTarb, xSteel)
     # Al_state1 = Al_Al.shock_interactions()
