@@ -1,13 +1,10 @@
 import numpy as np
 from scipy.optimize import fsolve
-from sympy import *
 import math
 import matplotlib.pyplot as plt
-from tabulate import tabulate
-
 
 class ShockCMatter:
-    def __init__(self, metalData, targetData, steelData, Vip, ViT, xProj, xTar, xTarb, xSteel):
+    def __init__(self, metalData, targetData, steelData, Vip, ViT, xProj, xTar, xTarb, xSteel, name):
         # initialize initial state
         self.M_i = metalData  # M for metal
         self.T_i = targetData  # T for target
@@ -18,6 +15,7 @@ class ShockCMatter:
         self.xS = xSteel
         self.Vip = Vip
         self.ViT = ViT
+        self.Mname = name
 
     def shock_interactions(self):
         # impedance_matching(L, rhoL, PL, TL,ViL, R, rhoR, PR, TR, ViR) start with LEFT and then RIGHT
@@ -31,20 +29,13 @@ class ShockCMatter:
         # Projectile Temperature with Cp = Cp(T). Internal energy requires Cv, NIST only has Cp: For solids Cv ~ Cp.
         ti = self.M_i.Ti/1000  # NIST equation requires temperature/1000
         t0 = np.array([state1p[2]/1000])  # guess
-        t = fsolve(ShockCMatter.changingCp_temp, t0, args=(ti, self.M_i.A, self.M_i.B, self.M_i.C, self.M_i.D, self.M_i.E,
-                                                           self.M_i.F, self.M_i.H, state1p[3]*10**6, self.M_i.M), xtol=1e-6)[0]
-        Tfp = t*1000  # K Final temperature
-        # Plot the deltaE - Nist equation to validate the temperature.
-        tt = np.linspace(0.29815, 2, 50)
-        y = state1p[3]*10**6 - (self.M_i.A*(tt-ti) + self.M_i.B*(tt**2 - ti**2)/2 + self.M_i.C*(tt**3 - ti**3)/3 +
-                                self.M_i.D*(tt**4 - ti**4)/4 - self.M_i.E*(1/tt - 1/ti))*1000/self.M_i.M
-        plt.plot(tt, y, 'r')
-        plt.show()
+        t = fsolve(ShockCMatter.changingCp_temp, t0, args=(ti, self.M_i.A, self.M_i.B, self.M_i.C, self.M_i.D, self.M_i.E, self.M_i.F, self.M_i.H, state1p[3]*10**6, self.M_i.M), xtol=1e-6)[0]
+        T1p_cp = t*1000  # K Final temperature
 
         # 2.Expansion wave back of the projectile
         V2, Vs_lead = ShockCMatter.expansion_projectile(self.M_i, state1p, V1, 'RRW')
         Vs_trail = self.M_i.CL
-        delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_shock_expansion = ShockCMatter.delta_energy(self, self.M_i, self.Vip, state1p, ti, t0)
+        delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_SE_cp, T_SE = ShockCMatter.delta_energy(self, self.M_i, self.Vip, state1p, ti, t0)
 
         # 3.Impedance matching Alumina reflected shock - steel target (Idealization) (VsT and 0)
         state3 = ShockCMatter.impedance_matching(self.T_i, state1T[0], state1T[1], state1T[2], V1,
@@ -53,39 +44,23 @@ class ShockCMatter:
         state3T = state3[1:6]  # Alumina
         state3S = state3[6:11]  # Steel
 
-        ShockCMatter.position_graph(self, V1, state1p, state1T, V2, Vs_lead, V3, state3T, state3S)
-        print(V2, Vs_lead)
-        print(state1p)
-        print(Tfp)
-        print(delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_shock_expansion)
+        # positionData, timeData = ShockCMatter.position_graph(self, V1, state1p, state1T, V2, Vs_lead, V3, state3T, state3S)
+        # print(V1, state1p)
+        # print(T1p_cp)
+        # print(delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_SE_cp, T_SE)
 
-        # Plot the P-u diagram
-        V = np.linspace(-0.5, 1, 20)
-        PLp = self.M_i.density*(self.Vip - V)*(self.M_i.C01 + (self.Vip - V)*self.M_i.s1) + self.M_i.Pi  # GPa LRW
-        PRp = self.M_i.density*(V - V2)*(self.M_i.C01 + (V - V2)*self.M_i.s1) + self.M_i.Pi  # GPa RRW
-        PRT = self.T_i.density*(V - self.ViT)*(self.T_i.C01 + (V - self.ViT)*self.T_i.s1) + self.T_i.Pi  # GPa
-        plt.plot(V, PLp, 'r')
-        plt.plot(V, PRp, 'b')
-        plt.plot(V, PRT, 'g')
-        plt.show()
+        data = [self.Mname, V1, state1p[4], state1p[0], state1p[1], delta_E_Raleigh, state1p[2], delta_E_Hugoniot, T_SE]
+        return data
 
-    @staticmethod
-    def expansion_projectile(state_i, state_f, Vf, side):
-        V0 = 0
-        V2 = fsolve(ShockCMatter.expansion_wave, V0, args=(state_i, state_f, Vf, side), xtol=1e-6)
-        # first Wave speed traveling through final shocked state of the projectile.
-        Vs_lagrange_lead = state_i.C01 + 2*state_i.s1*(Vf - V2)
-        Vs_lead = Vs_lagrange_lead + Vf
-        return V2, Vs_lead
-
-    @staticmethod
-    def expansion_wave(V0, state_i, state_f, Vf, side):
-        # Find V0 of the reflection
-        P0 = state_i.Pi
-        if side == 'LRW':  # LRW: P  = rho0*(V0 - V)*(C0 + s*(V0 - V)) + P0
-            return state_i.density*(V0 - Vf)*(state_i.C01 + state_i.s1*(V0 - Vf)) + P0 - state_f[1]
-        elif side == 'RRW':  # RRW: P  = rho0*(V - V0)*(C0 + s*(V - V0)) + P0
-            return state_i.density*(Vf - V0)*(state_i.C01 + state_i.s1*(Vf - V0)) + P0 - state_f[1]
+    # Plot the P-u diagram
+    # V = np.linspace(-0.5, 1, 20)
+    # PLp = self.M_i.density*(self.Vip - V)*(self.M_i.C01 + (self.Vip - V)*self.M_i.s1) + self.M_i.Pi  # GPa LRW
+    # PRp = self.M_i.density*(V - V2)*(self.M_i.C01 + (V - V2)*self.M_i.s1) + self.M_i.Pi  # GPa RRW
+    # PRT = self.T_i.density*(V - self.ViT)*(self.T_i.C01 + (V - self.ViT)*self.T_i.s1) + self.T_i.Pi  # GPa
+    # plt.plot(V, PLp, 'r')
+    # plt.plot(V, PRp, 'b')
+    # plt.plot(V, PRT, 'g')
+    # plt.show()
 
     @staticmethod
     def impedance_matching(L, rhoL, PL, TL, ViL, R, rhoR, PR, TR, ViR):
@@ -131,19 +106,41 @@ class ShockCMatter:
 
     @staticmethod
     def delta_energy(self, state_i, Vi, state_f, ti, t0):
-        sv0 = 1/state_i.density
-        sv = 1/state_f[0]
-        Vs = state_f[4]   # It is the shock compression speed because Rayleigh line.
-        # Delta_E_Raleigh is the same as the delta energy computed in downstream prop
+        sv0 = 1/state_i.density  # sv: specific volume
+        sv = 1/state_f[0]  # behind the shock
+        Vs = state_f[4]
+        # delta_E_Raleigh = AR, should be the same as the delta energy computed in downstream prop
         delta_E_Raleigh = -(Vs - Vi)**2*(sv - sv0)/sv0 + (Vs - Vi)**2*(sv**2 - sv0**2)/(2*sv0**2) - state_i.Pi*(sv - sv0)
+        # delta_E_Hugoniot = AH
         delta_E_Hugoniot = (state_i.C01/state_i.s1)**2*(math.log((sv0 - state_i.s1*(sv0 - sv))/sv0) +
                                                         state_i.s1*(sv0 - sv)/(sv0 - state_i.s1*(sv0 - sv))) - state_i.Pi*(sv - sv0)
         delta_E = delta_E_Raleigh - delta_E_Hugoniot  # MJ/kg
-        # Get the temperature
-        t_shock_expansion = fsolve(ShockCMatter.changingCp_temp, t0, args=(ti, self.M_i.A, self.M_i.B, self.M_i.C, self.M_i.D, self.M_i.E,
+
+        # Get the temperature using varying specific heat and constant specific heat.
+        t_SE_cp = fsolve(ShockCMatter.changingCp_temp, t0, args=(ti, self.M_i.A, self.M_i.B, self.M_i.C, self.M_i.D, self.M_i.E,
                                                            self.M_i.F, self.M_i.H, delta_E*10**6, self.M_i.M), xtol=1e-6)[0]
-        T_shock_expansion = t_shock_expansion*1000  # K Final temperature
-        return delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_shock_expansion
+        T_SE_cp = t_SE_cp*1000  # K Final temperature
+        T_SE = (delta_E*10**6/self.M_i.specHC) + self.M_i.Ti  # K
+
+        return delta_E_Raleigh, delta_E_Hugoniot, delta_E, T_SE_cp, T_SE
+
+    @staticmethod
+    def expansion_projectile(state_i, state_f, Vf, side):
+        V0 = 0
+        V2 = fsolve(ShockCMatter.expansion_wave, V0, args=(state_i, state_f, Vf, side), xtol=1e-6)
+        # first Wave speed traveling through final shocked state of the projectile.
+        Vs_lagrange_lead = state_i.C01 + 2*state_i.s1*(Vf - V2)
+        Vs_lead = Vs_lagrange_lead + Vf
+        return V2, Vs_lead
+
+    @staticmethod
+    def expansion_wave(V0, state_i, state_f, Vf, side):
+        # Find V0 of the reflection
+        P0 = state_i.Pi
+        if side == 'LRW':  # LRW: P  = rho0*(V0 - V)*(C0 + s*(V0 - V)) + P0
+            return state_i.density*(V0 - Vf)*(state_i.C01 + state_i.s1*(V0 - Vf)) + P0 - state_f[1]
+        elif side == 'RRW':  # RRW: P  = rho0*(V - V0)*(C0 + s*(V - V0)) + P0
+            return state_i.density*(Vf - V0)*(state_i.C01 + state_i.s1*(Vf - V0)) + P0 - state_f[1]
 
     @staticmethod
     def xt_diagram(x1, t1, V1, x2, t2, V2):
@@ -169,15 +166,23 @@ class ShockCMatter:
         x5 = x1 + V2*(t4-t1)
 
         # plt.xlim(x1b, x1S),
-        plt.ylim(0, 3*10**-6)
-        plt.plot([x1_sp, x1], [t1_sp, t1])
-        plt.plot([x1b, x1], [t1b, t1])
-        plt.plot([x1_sT, x2], [t1_sT, t2])
-        plt.plot([x1S, x2], [t1S, t2])
-        plt.plot([x3_sT, x3], [t3_sT, t3])
-        plt.plot([x4_E, x4], [t4_E, t4])
-        plt.plot([x4_I1, x4], [t4_I1, t4])
-        plt.plot([x1, x5], [t1, t3])
-        plt.xlabel('Position, km')
-        plt.ylabel('time, s')
+        plt.ylim(0, 2.5)
+        plt.plot([x1_sp*10**6, x1*10**6], [t1_sp*10**6, t1*10**6])
+        plt.plot([x1b*10**6, x1*10**6], [t1b*10**6, t1*10**6])
+        plt.plot([x1_sT*10**6, x2*10**6], [t1_sT*10**6, t2*10**6])
+        plt.plot([x1S*10**6, x2*10**6], [t1S*10**6, t2*10**6])
+        plt.plot([x3_sT*10**6, x3*10**6], [t3_sT*10**6, t3*10**6])
+        plt.plot([x4_E*10**6, x4*10**6], [t4_E*10**6, t4*10**6])
+        plt.plot([x4_I1*10**6, x4*10**6], [t4_I1*10**6, t4*10**6])
+        plt.plot([x1*10**6, x5*10**6], [t1*10**6, t3*10**6])
+        plt.xlabel('Position, mm')
+        plt.ylabel('time, \u03BCs')
         plt.show()
+
+        positionData = [[x1_sp*10**6, x1*10**6], [x1b*10**6, x1*10**6], [x1_sT*10**6, x2*10**6], [x1S*10**6, x2*10**6],
+        [x3_sT*10**6, x3*10**6], [x4_E*10**6, x4*10**6], [x4_I1*10**6, x4*10**6], [x1*10**6, x5*10**6]]
+
+        timeData = [[t1_sp*10**6, t1*10**6], [t1b*10**6, t1*10**6], [t1_sT*10**6, t2*10**6], [t1S*10**6, t2*10**6],
+        [t3_sT*10**6, t3*10**6], [t4_E*10**6, t4*10**6], [t4_I1*10**6, t4*10**6], [t1*10**6, t3*10**6]]
+
+        return positionData, timeData
